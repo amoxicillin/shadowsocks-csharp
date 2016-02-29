@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
+using System.Timers;
 
 namespace Shadowsocks.Controller
 {
@@ -16,14 +17,24 @@ namespace Shadowsocks.Controller
         }
 
         Configuration _config;
+        //bool _buildinHttpProxy;
         bool _shareOverLAN;
+        string _authUser;
+        string _authPass;
         Socket _socket;
         Socket _socket_v6;
         IList<Service> _services;
+        protected System.Timers.Timer timer;
+        protected object timerLock = new object();
 
         public Listener(IList<Service> services)
         {
             this._services = services;
+        }
+
+        public IList<Service> GetServices()
+        {
+            return _services;
         }
 
         private bool CheckIfPortInUse(int port)
@@ -41,10 +52,27 @@ namespace Shadowsocks.Controller
             return false;
         }
 
+        public bool isConfigChange(Configuration config)
+        {
+            if (this._shareOverLAN != config.shareOverLan
+                //|| _buildinHttpProxy != config.buildinHttpProxy
+                || _authUser != config.authUser
+                || _authPass != config.authPass
+                || _socket == null
+                || ((IPEndPoint)_socket.LocalEndPoint).Port != config.localPort)
+            {
+                return true;
+            }
+            return false;
+        }
+
         public void Start(Configuration config)
         {
             this._config = config;
             this._shareOverLAN = config.shareOverLan;
+            //this._buildinHttpProxy = config.buildinHttpProxy;
+            this._authUser = config.authUser;
+            this._authPass = config.authPass;
 
             if (CheckIfPortInUse(_config.localPort))
                 throw new Exception(I18N.GetString("Port already in use"));
@@ -92,7 +120,7 @@ namespace Shadowsocks.Controller
 
 
                 // Start an asynchronous socket to listen for connections.
-                Console.WriteLine("Shadowsocks started");
+                Console.WriteLine("ShadowsocksR started");
                 _socket.BeginAccept(
                     new AsyncCallback(AcceptCallback),
                     _socket);
@@ -112,6 +140,7 @@ namespace Shadowsocks.Controller
 
         public void Stop()
         {
+            ResetTimeout(0, null);
             if (_socket != null)
             {
                 _socket.Close();
@@ -124,6 +153,67 @@ namespace Shadowsocks.Controller
             }
         }
 
+        private void ResetTimeout(Double time, Socket socket)
+        {
+            if (time <= 0 && timer == null)
+                return;
+
+            lock (timerLock)
+            {
+                if (time <= 0)
+                {
+                    if (timer != null)
+                    {
+                        timer.Enabled = false;
+                        timer.Elapsed -= (sender, e) => timer_Elapsed(sender, e, socket);
+                        timer.Dispose();
+                        timer = null;
+                    }
+                }
+                else
+                {
+                    if (timer == null)
+                    {
+                        timer = new System.Timers.Timer(time * 1000.0);
+                        timer.Elapsed += (sender, e) => timer_Elapsed(sender, e, socket);
+                        timer.Start();
+                    }
+                    else
+                    {
+                        timer.Interval = time * 1000.0;
+                        timer.Stop();
+                        timer.Start();
+                    }
+                }
+            }
+        }
+
+        private void timer_Elapsed(object sender, ElapsedEventArgs eventArgs, Socket socket)
+        {
+            if (timer == null)
+            {
+                return;
+            }
+            Socket listener = socket;
+            try
+            {
+                listener.BeginAccept(
+                    new AsyncCallback(AcceptCallback),
+                    listener);
+                ResetTimeout(0, listener);
+            }
+            catch (ObjectDisposedException)
+            {
+                // do nothing
+            }
+            catch (Exception e)
+            {
+                Logging.LogUsefulException(e);
+                ResetTimeout(5, listener);
+            }
+        }
+
+
         public void AcceptCallback(IAsyncResult ar)
         {
             Socket listener = (Socket)ar.AsyncState;
@@ -131,14 +221,22 @@ namespace Shadowsocks.Controller
             {
                 Socket conn = listener.EndAccept(ar);
 
-                byte[] buf = new byte[4096];
-                object[] state = new object[] {
-                    conn,
-                    buf
-                };
+                if ((_authUser ?? "").Length == 0 && !Util.Utils.isLAN(conn))
+                {
+                    conn.Shutdown(SocketShutdown.Both);
+                    conn.Close();
+                }
+                else
+                {
+                    byte[] buf = new byte[4096];
+                    object[] state = new object[] {
+                        conn,
+                        buf
+                    };
 
-                conn.BeginReceive(buf, 0, buf.Length, 0,
-                    new AsyncCallback(ReceiveCallback), state);
+                    conn.BeginReceive(buf, 0, buf.Length, 0,
+                        new AsyncCallback(ReceiveCallback), state);
+                }
             }
             catch (ObjectDisposedException)
             {
@@ -162,6 +260,7 @@ namespace Shadowsocks.Controller
                 catch (Exception e)
                 {
                     Logging.LogUsefulException(e);
+                    ResetTimeout(5, listener);
                 }
             }
         }
@@ -185,11 +284,13 @@ namespace Shadowsocks.Controller
                 }
                 // no service found for this
                 // shouldn't happen
+                conn.Shutdown(SocketShutdown.Both);
                 conn.Close();
             }
             catch (Exception e)
             {
                 Console.WriteLine(e);
+                conn.Shutdown(SocketShutdown.Both);
                 conn.Close();
             }
         }

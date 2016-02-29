@@ -127,24 +127,36 @@
     <Compile Include="Controller\AutoStartup.cs" />
     <Compile Include="Controller\FileManager.cs" />
     <Compile Include="Controller\GFWListUpdater.cs" />
+    <Compile Include="Controller\HttpPortForwarder.cs" />
+    <Compile Include="Controller\HttpProxy.cs" />
+    <Compile Include="Controller\HttpProxyRunner.cs" />
     <Compile Include="Controller\I18N.cs" />
     <Compile Include="Controller\Listener.cs" />
     <Compile Include="Controller\Logging.cs" />
     <Compile Include="Controller\PortForwarder.cs" />
+    <Compile Include="Controller\SpeedTest.cs" />
     <Compile Include="Controller\TDP.cs" />
     <Compile Include="Controller\UpdateChecker.cs" />
     <Compile Include="Encryption\EncryptorBase.cs" />
     <Compile Include="Encryption\EncryptorFactory.cs" />
     <Compile Include="Encryption\IVEncryptor.cs" />
+    <Compile Include="Encryption\MbedTLS.cs" />
     <Compile Include="Encryption\PolarSSL.cs" />
     <Compile Include="Encryption\PolarSSLEncryptor.cs" />
     <Compile Include="Encryption\Sodium.cs" />
     <Compile Include="Encryption\SodiumEncryptor.cs" />
-    <Compile Include="Encryption\TableEncryptor.cs" />
     <Compile Include="Encryption\IEncryptor.cs" />
     <Compile Include="Controller\PACServer.cs" />
     <Compile Include="Model\Server.cs" />
     <Compile Include="Model\Configuration.cs" />
+    <Compile Include="Model\ServerSpeedLog.cs" />
+    <Compile Include="Obfs\Auth.cs" />
+    <Compile Include="Obfs\HttpSimpleObfs.cs" />
+    <Compile Include="Obfs\IObfs.cs" />
+    <Compile Include="Obfs\ObfsBase.cs" />
+    <Compile Include="Obfs\ObfsFactory.cs" />
+    <Compile Include="Obfs\Plain.cs" />
+    <Compile Include="Obfs\VerifySimpleObfs.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -159,7 +171,6 @@
       <DependentUpon>ConfigForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Controller\Local.cs" />
-    <Compile Include="Controller\PolipoRunner.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Controller\ShadowsocksController.cs" />
@@ -180,6 +191,12 @@
     <Compile Include="View\ServerLogForm.Designer.cs">
       <DependentUpon>ServerLogForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="View\SettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="View\SettingsForm.Designer.cs">
+      <DependentUpon>SettingsForm.cs</DependentUpon>
+    </Compile>
     <EmbeddedResource Include="View\ConfigForm.resx">
       <DependentUpon>ConfigForm.cs</DependentUpon>
       <SubType>Designer</SubType>
@@ -195,15 +212,16 @@
     <EmbeddedResource Include="View\ServerLogForm.resx">
       <DependentUpon>ServerLogForm.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="View\SettingsForm.resx">
+      <DependentUpon>SettingsForm.cs</DependentUpon>
+    </EmbeddedResource>
     <None Include="app.config" />
     <None Include="app.manifest">
       <SubType>Designer</SubType>
     </None>
-    <None Include="Data\abp.js.gz" />
     <None Include="Data\libsscrypto.dll.gz" />
     <None Include="Data\mgwz.dll.gz" />
     <None Include="Data\privoxy.exe.gz" />
-    <None Include="Data\proxy.pac.txt.gz" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Properties\DataSources\Shadowsocks.View.ConfigForm.datasource" />

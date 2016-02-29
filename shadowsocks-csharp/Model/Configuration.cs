@@ -12,6 +12,9 @@ namespace Shadowsocks.Model
     {
         private Random randomGennarator;
         private int lastSelectIndex;
+        private DateTime lastSelectTime;
+        private int lastUserSelectIndex;
+
         private struct ServerIndex
         {
             public int index;
@@ -49,7 +52,8 @@ namespace Shadowsocks.Model
                 return 500;
             else
             {
-                double chance = 10000.0 / serverSpeedLog.AvgConnectTime;
+                long connections = serverSpeedLog.TotalConnectTimes - serverSpeedLog.TotalDisconnectTimes;
+                double chance = 10000.0 / serverSpeedLog.AvgConnectTime - connections * 5;
                 if (chance > 500) chance = 500;
                 chance -= serverSpeedLog.ErrorContinurousTimes * 10;
                 if (chance < 1) chance = 1;
@@ -67,7 +71,8 @@ namespace Shadowsocks.Model
                 return 1;
             else
             {
-                double chance = 20.0 / (serverSpeedLog.AvgConnectTime / 500 + 1);
+                long connections = serverSpeedLog.TotalConnectTimes - serverSpeedLog.TotalDisconnectTimes;
+                double chance = 20.0 / (serverSpeedLog.AvgConnectTime / 500 + 1) - connections;
                 if (chance > 500) chance = 500;
                 chance -= serverSpeedLog.ErrorContinurousTimes * 2;
                 if (chance < 1) chance = 1;
@@ -75,18 +80,40 @@ namespace Shadowsocks.Model
             }
         }
 
-        public int Select(List<Server> configs, int curIndex, int algorithm)
+        public int Select(List<Server> configs, int curIndex, int algorithm, bool forceChange = false)
         {
             if (randomGennarator == null)
             {
                 randomGennarator = new Random();
                 lastSelectIndex = -1;
             }
+            if (configs.Count <= lastSelectIndex || lastSelectIndex < 0 || !configs[lastSelectIndex].isEnable())
+            {
+                lastSelectIndex = -1;
+                lastSelectTime = DateTime.Now;
+                lastUserSelectIndex = -1;
+            }
+            if (lastUserSelectIndex != curIndex)
+            {
+                if (configs.Count > curIndex && curIndex >= 0 && configs[curIndex].isEnable())
+                {
+                    lastSelectIndex = curIndex;
+                }
+                lastUserSelectIndex = curIndex;
+            }
             if (configs.Count > 0)
             {
                 List<ServerIndex> serverList = new List<ServerIndex>();
                 for (int i = 0; i < configs.Count; ++i)
                 {
+                    if (forceChange && lastSelectIndex == i)
+                        continue;
+                    if (configs[i].isEnable())
+                        serverList.Add(new ServerIndex(i, configs[i]));
+                }
+                if (serverList.Count == 0)
+                {
+                    int i = lastSelectIndex;
                     if (configs[i].isEnable())
                         serverList.Add(new ServerIndex(i, configs[i]));
                 }
@@ -114,8 +141,22 @@ namespace Shadowsocks.Model
                         serverListIndex = randomGennarator.Next(serverList.Count);
                         serverListIndex = serverList[serverListIndex].index;
                     }
-                    else if (algorithm == 3)
+                    else if (algorithm == 3 || algorithm == 5)
                     {
+                        if (algorithm == 5)
+                        {
+                            if ((DateTime.Now - lastSelectTime).TotalSeconds > 60 * 10)
+                            {
+                                lastSelectTime = DateTime.Now;
+                            }
+                            else
+                            {
+                                if (configs.Count > lastSelectIndex && lastSelectIndex >= 0 && configs[lastSelectIndex].isEnable() && !forceChange)
+                                {
+                                    return lastSelectIndex;
+                                }
+                            }
+                        }
                         List<double> chances = new List<double>();
                         double lastBeginVal = 0;
                         foreach (ServerIndex s in serverList)
@@ -128,6 +169,7 @@ namespace Shadowsocks.Model
                             double target = randomGennarator.NextDouble() * lastBeginVal;
                             serverListIndex = lowerBound(chances, target);
                             serverListIndex = serverList[serverListIndex].index;
+                            lastSelectIndex = serverListIndex;
                             return serverListIndex;
                         }
                     }
@@ -141,18 +183,21 @@ namespace Shadowsocks.Model
                             chances.Add(lastBeginVal + chance);
                             lastBeginVal += chance;
                         }
-                        if (algorithm == 4 && randomGennarator.Next(3) == 0)
+                        if (algorithm == 4 && randomGennarator.Next(3) == 0 && configs[curIndex].isEnable())
                         {
+                            lastSelectIndex = curIndex;
                             return curIndex;
                         }
                         {
                             double target = randomGennarator.NextDouble() * lastBeginVal;
                             serverListIndex = lowerBound(chances, target);
                             serverListIndex = serverList[serverListIndex].index;
+                            lastSelectIndex = serverListIndex;
                             return serverListIndex;
                         }
                     }
                 }
+                lastSelectIndex = serverListIndex;
                 return serverListIndex;
             }
             else
@@ -178,12 +223,16 @@ namespace Shadowsocks.Model
         public int reconnectTimes;
         public int randomAlgorithm;
         public int TTL;
-        public bool socks5enable;
-        public string socks5Host;
-        public int socks5Port;
-        public string socks5User;
-        public string socks5Pass;
+        public bool proxyEnable;
+        public int proxyType;
+        public string proxyHost;
+        public int proxyPort;
+        public string proxyAuthUser;
+        public string proxyAuthPass;
+        public string authUser;
+        public string authPass;
         public bool autoban;
+        //public bool buildinHttpProxy;
         private ServerSelectStrategy serverStrategy = new ServerSelectStrategy();
 
         private static string CONFIG_FILE = "gui-config.json";
@@ -194,7 +243,7 @@ namespace Shadowsocks.Model
             {
                 if (forceRandom)
                 {
-                    int index = serverStrategy.Select(configs, this.index, randomAlgorithm);
+                    int index = serverStrategy.Select(configs, this.index, randomAlgorithm, true);
                     if (index == -1) return GetDefaultServer();
                     return configs[index];
                 }
@@ -251,6 +300,41 @@ namespace Shadowsocks.Model
                 if (config.localPort == 0)
                 {
                     config.localPort = 1080;
+                }
+                // revert base64 encode for version 3.5.4
+                {
+                    int base64_encode = 0;
+                    foreach (var server in config.configs)
+                    {
+                        string remarks = server.remarks;
+                        if (remarks.Length == 0)
+                            continue;
+                        if (server.remarks[remarks.Length - 1] == '=')
+                        {
+                            server.remarks_base64 = remarks;
+                            if (server.remarks_base64 == server.remarks)
+                            {
+                                server.remarks = remarks;
+                                base64_encode = 0;
+                                break;
+                            }
+                            else
+                            {
+                                base64_encode++;
+                            }
+                            server.remarks = remarks;
+                        }
+                    }
+                    if (base64_encode > 0)
+                    {
+                        foreach (var server in config.configs)
+                        {
+                            string remarks = server.remarks;
+                            if (remarks.Length == 0)
+                                continue;
+                            server.remarks_base64 = remarks;
+                        }
+                    }
                 }
                 return config;
             }

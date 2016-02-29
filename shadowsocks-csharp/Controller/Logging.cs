@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
+using Shadowsocks.Obfs;
 
 namespace Shadowsocks.Controller
 {
@@ -18,6 +20,7 @@ namespace Shadowsocks.Controller
     public class Logging
     {
         public static string LogFile;
+        protected static string date;
 
         public static bool OpenLogFile()
         {
@@ -28,7 +31,8 @@ namespace Shadowsocks.Controller
                 {
                     Directory.CreateDirectory(curpath);
                 }
-                LogFile = Path.Combine(curpath, "shadowsocks.log");
+                date = DateTime.Now.ToString("yyyy-MM");
+                LogFile = Path.Combine(curpath, "shadowsocks_" + date + ".log");
                 FileStream fs = new FileStream(LogFile, FileMode.Append);
                 StreamWriterWithTimestamp sw = new StreamWriterWithTimestamp(fs);
                 sw.AutoFlush = true;
@@ -50,9 +54,22 @@ namespace Shadowsocks.Controller
             Console.WriteLine(o);
 #endif
         }
+        private static string ToString(StackFrame[] stacks)
+        {
+            string result = string.Empty;
+            foreach (StackFrame stack in stacks)
+            {
+                result += string.Format("{0}\r\n", stack.GetMethod().ToString());
+            }
+            return result;
+        }
 
         public static void LogUsefulException(Exception e)
         {
+            if (DateTime.Now.ToString("yyyy-MM") != date)
+            {
+                OpenLogFile();
+            }
             // just log useful exceptions, not all of them
             if (e is SocketException)
             {
@@ -74,25 +91,47 @@ namespace Shadowsocks.Controller
                 {
                     // already closed
                 }
+                else if (se.SocketErrorCode == SocketError.Shutdown)
+                {
+                    // ignore
+                }
                 else
                 {
                     Console.WriteLine(e);
+//#if DEBUG
+                    Console.WriteLine(ToString(new StackTrace().GetFrames()));
+//#endif
                 }
-            }
-            else if (e is System.ObjectDisposedException)
-            {
-                // ignore
             }
             else
             {
                 Console.WriteLine(e);
+//#if DEBUG
+                Console.WriteLine(ToString(new StackTrace().GetFrames()));
+//#endif
             }
         }
 
         public static bool LogSocketException(string remarks, string server, Exception e)
         {
+            if (DateTime.Now.ToString("yyyy-MM") != date)
+            {
+                OpenLogFile();
+            }
             // just log useful exceptions, not all of them
-            if (e is SocketException)
+            if (e is ObfsException)
+            {
+                ObfsException oe = (ObfsException)e;
+                Logging.Log(LogLevel.Error, "Proxy server [" + remarks + "(" + server + ")] "
+                    + oe.Message);
+                return true;
+            }
+            else if (e is ObjectDisposedException)
+            {
+                // ignore
+                return true;
+            }
+            else if (e is SocketException)
             {
                 SocketException se = (SocketException)e;
                 if (se.SocketErrorCode == SocketError.ConnectionAborted)
@@ -139,14 +178,21 @@ namespace Shadowsocks.Controller
                 }
                 else if (se.SocketErrorCode == SocketError.TimedOut)
                 {
-                    Logging.Log(LogLevel.Warn, "Proxy server [" + remarks + "(" + server + ")] "
-                        + "connection timeout");
+                    //Logging.Log(LogLevel.Warn, "Proxy server [" + remarks + "(" + server + ")] "
+                    //    + "connection timeout");
+                    return true;
+                }
+                else if (se.SocketErrorCode == SocketError.Shutdown)
+                {
                     return true;
                 }
                 else
                 {
                     Logging.Log(LogLevel.Info, "Proxy server [" + remarks + "(" + server + ")] "
                         + Convert.ToString(se.SocketErrorCode) + ":" + se.Message);
+//#if DEBUG
+                    Console.WriteLine(ToString(new StackTrace().GetFrames()));
+//#endif
                     return true;
                 }
             }
@@ -166,7 +212,7 @@ namespace Shadowsocks.Controller
 
         public static void LogBin(LogLevel level, string info, byte[] data, int length)
         {
-            return;
+#if _DEBUG
             string s = "";
             for (int i = 0; i < length; ++i)
             {
@@ -174,6 +220,7 @@ namespace Shadowsocks.Controller
                 s += " " + fs.Substring(fs.Length - 2, 2);
             }
             Log(level, info + s);
+#endif
         }
 
     }

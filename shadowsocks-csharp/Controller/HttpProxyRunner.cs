@@ -12,20 +12,20 @@ using System.Runtime.InteropServices;
 
 namespace Shadowsocks.Controller
 {
-    class PolipoRunner
+    class HttpProxyRunner
     {
         private Process _process;
         private static string runningPath;
         private int _runningPort;
 
-        static PolipoRunner()
+        static HttpProxyRunner()
         {
-
             runningPath = Path.Combine(System.Windows.Forms.Application.StartupPath, @"temp"); // Path.GetTempPath();
             if (!Directory.Exists(runningPath))
             {
                 Directory.CreateDirectory(runningPath);
             }
+            Kill();
             try
             {
                 FileManager.UncompressFile(runningPath + "/ss_privoxy.exe", Resources.privoxy_exe);
@@ -45,36 +45,48 @@ namespace Shadowsocks.Controller
             }
         }
 
+        public bool HasExited()
+        {
+            if (_process == null)
+                return true;
+            return _process.HasExited;
+        }
+
+        public static void Kill()
+        {
+            Process[] existingPolipo = Process.GetProcessesByName("ss_privoxy");
+            foreach (Process p in existingPolipo)
+            {
+                string str;
+                try
+                {
+                    str = p.MainModule.FileName;
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (str == Path.GetFullPath(runningPath + "/ss_privoxy.exe"))
+                {
+                    try
+                    {
+                        p.Kill();
+                        p.WaitForExit();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e.ToString());
+                    }
+                }
+            }
+        }
+
         public void Start(Configuration configuration)
         {
             Server server = configuration.GetCurrentServer();
             if (_process == null)
             {
-                Process[] existingPolipo = Process.GetProcessesByName("ss_privoxy");
-                foreach (Process p in existingPolipo)
-                {
-                    string str;
-                    try
-                    {
-                        str = p.MainModule.FileName;
-                    }
-                    catch (Exception)
-                    {
-                        continue;
-                    }
-                    if (str == Path.GetFullPath(runningPath + "/ss_privoxy.exe"))
-                    {
-                        try
-                        {
-                            p.Kill();
-                            p.WaitForExit();
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine(e.ToString());
-                        }
-                    }
-                }
+                Kill();
                 string polipoConfig = Resources.privoxy_conf;
                 _runningPort = this.GetFreePort();
                 polipoConfig = polipoConfig.Replace("__SOCKS_PORT__", configuration.localPort.ToString());
@@ -91,9 +103,15 @@ namespace Shadowsocks.Controller
                 _process.StartInfo.CreateNoWindow = true;
                 //_process.StartInfo.RedirectStandardOutput = true;
                 //_process.StartInfo.RedirectStandardError = true;
-                _process.Start();
+                try
+                {
+                    _process.Start();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e.ToString());
+                }
             }
-            RefreshTrayArea();
         }
 
         public void Stop()
@@ -116,7 +134,7 @@ namespace Shadowsocks.Controller
 
         private int GetFreePort()
         {
-            int defaultPort = 8123;
+            int defaultPort = 60000;
             try
             {
                 IPGlobalProperties properties = IPGlobalProperties.GetIPGlobalProperties();
@@ -127,8 +145,9 @@ namespace Shadowsocks.Controller
                 {
                     usedPorts.Add(endPoint.Port);
                 }
-                for (int port = defaultPort; port <= 65535; port++)
+                for (int nTry = 0; nTry < 1000; nTry++)
                 {
+                    int port = new Random().Next(10000, 65536);
                     if (!usedPorts.Contains(port))
                     {
                         return port;

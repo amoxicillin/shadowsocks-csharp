@@ -42,10 +42,11 @@
             this.MaxSpeed = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.Upload = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.Download = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.DownloadRaw = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.ErrorPercent = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.ConnectError = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.ConnectTimeout = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.ConnectNoData = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.ConnectEmpty = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.Continuous = new System.Windows.Forms.DataGridViewTextBoxColumn();
             ((System.ComponentModel.ISupportInitialize)(this.ServerDataGrid)).BeginInit();
             this.tableLayoutPanel1.SuspendLayout();
@@ -69,10 +70,11 @@
             this.MaxSpeed,
             this.Upload,
             this.Download,
+            this.DownloadRaw,
             this.ErrorPercent,
             this.ConnectError,
             this.ConnectTimeout,
-            this.ConnectNoData,
+            this.ConnectEmpty,
             this.Continuous});
             this.ServerDataGrid.Dock = System.Windows.Forms.DockStyle.Fill;
             this.ServerDataGrid.Location = new System.Drawing.Point(0, 0);
@@ -83,7 +85,7 @@
             this.ServerDataGrid.ReadOnly = true;
             this.ServerDataGrid.RowHeadersVisible = false;
             this.ServerDataGrid.RowTemplate.Height = 23;
-            this.ServerDataGrid.Size = new System.Drawing.Size(117, 48);
+            this.ServerDataGrid.Size = new System.Drawing.Size(128, 48);
             this.ServerDataGrid.TabIndex = 0;
             this.ServerDataGrid.CellClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.ServerDataGrid_CellClick);
             this.ServerDataGrid.CellDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.ServerDataGrid_CellDoubleClick);
@@ -109,7 +111,7 @@
             this.tableLayoutPanel1.Name = "tableLayoutPanel1";
             this.tableLayoutPanel1.RowCount = 1;
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle());
-            this.tableLayoutPanel1.Size = new System.Drawing.Size(116, 48);
+            this.tableLayoutPanel1.Size = new System.Drawing.Size(128, 48);
             this.tableLayoutPanel1.TabIndex = 1;
             // 
             // ID
@@ -126,7 +128,6 @@
             this.Server.MinimumWidth = 2;
             this.Server.Name = "Server";
             this.Server.ReadOnly = true;
-            this.Server.Width = 200;
             // 
             // Enable
             // 
@@ -194,6 +195,14 @@
             this.Download.ReadOnly = true;
             this.Download.Width = 72;
             // 
+            // DownloadRaw
+            // 
+            this.DownloadRaw.HeaderText = "DownloadRaw";
+            this.DownloadRaw.MinimumWidth = 2;
+            this.DownloadRaw.Name = "DownloadRaw";
+            this.DownloadRaw.ReadOnly = true;
+            this.DownloadRaw.Width = 72;
+            // 
             // ErrorPercent
             // 
             this.ErrorPercent.HeaderText = "Error Percent";
@@ -201,7 +210,7 @@
             this.ErrorPercent.Name = "ErrorPercent";
             this.ErrorPercent.ReadOnly = true;
             this.ErrorPercent.SortMode = System.Windows.Forms.DataGridViewColumnSortMode.NotSortable;
-            this.ErrorPercent.Width = 60;
+            this.ErrorPercent.Width = 48;
             // 
             // ConnectError
             // 
@@ -210,7 +219,6 @@
             this.ConnectError.Name = "ConnectError";
             this.ConnectError.ReadOnly = true;
             this.ConnectError.SortMode = System.Windows.Forms.DataGridViewColumnSortMode.NotSortable;
-            this.ConnectError.Visible = false;
             this.ConnectError.Width = 28;
             // 
             // ConnectTimeout
@@ -220,33 +228,32 @@
             this.ConnectTimeout.Name = "ConnectTimeout";
             this.ConnectTimeout.ReadOnly = true;
             this.ConnectTimeout.SortMode = System.Windows.Forms.DataGridViewColumnSortMode.NotSortable;
-            this.ConnectTimeout.Visible = false;
             this.ConnectTimeout.Width = 28;
             // 
-            // ConnectNoData
+            // ConnectEmpty
             // 
-            this.ConnectNoData.HeaderText = "NoData";
-            this.ConnectNoData.MinimumWidth = 2;
-            this.ConnectNoData.Name = "ConnectNoData";
-            this.ConnectNoData.ReadOnly = true;
-            this.ConnectNoData.SortMode = System.Windows.Forms.DataGridViewColumnSortMode.NotSortable;
-            this.ConnectNoData.Visible = false;
-            this.ConnectNoData.Width = 28;
+            this.ConnectEmpty.HeaderText = "Empty Response";
+            this.ConnectEmpty.MinimumWidth = 2;
+            this.ConnectEmpty.Name = "ConnectEmpty";
+            this.ConnectEmpty.ReadOnly = true;
+            this.ConnectEmpty.SortMode = System.Windows.Forms.DataGridViewColumnSortMode.NotSortable;
+            this.ConnectEmpty.Width = 28;
             // 
             // Continuous
             // 
             this.Continuous.HeaderText = "Continuous";
             this.Continuous.Name = "Continuous";
             this.Continuous.ReadOnly = true;
+            this.Continuous.Visible = false;
             this.Continuous.Width = 28;
             // 
             // ServerLogForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(116, 48);
+            this.ClientSize = new System.Drawing.Size(128, 48);
             this.Controls.Add(this.tableLayoutPanel1);
-            this.Font = new System.Drawing.Font("NSimSun", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.Font = new System.Drawing.Font("新宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.Name = "ServerLogForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
@@ -273,10 +280,11 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn MaxSpeed;
         private System.Windows.Forms.DataGridViewTextBoxColumn Upload;
         private System.Windows.Forms.DataGridViewTextBoxColumn Download;
+        private System.Windows.Forms.DataGridViewTextBoxColumn DownloadRaw;
         private System.Windows.Forms.DataGridViewTextBoxColumn ErrorPercent;
         private System.Windows.Forms.DataGridViewTextBoxColumn ConnectError;
         private System.Windows.Forms.DataGridViewTextBoxColumn ConnectTimeout;
-        private System.Windows.Forms.DataGridViewTextBoxColumn ConnectNoData;
+        private System.Windows.Forms.DataGridViewTextBoxColumn ConnectEmpty;
         private System.Windows.Forms.DataGridViewTextBoxColumn Continuous;
     }
 }

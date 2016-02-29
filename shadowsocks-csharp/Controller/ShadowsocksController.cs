@@ -20,7 +20,7 @@ namespace Shadowsocks.Controller
         private Listener _listener;
         private PACServer _pacServer;
         private Configuration _config;
-        private PolipoRunner polipoRunner;
+        private HttpProxyRunner polipoRunner;
         private GFWListUpdater gfwListUpdater;
         private bool stopped = false;
 
@@ -34,7 +34,7 @@ namespace Shadowsocks.Controller
         public event EventHandler ConfigChanged;
         public event EventHandler EnableStatusChanged;
         public event EventHandler EnableGlobalChanged;
-        public event EventHandler ShareOverLANStatusChanged;
+        //public event EventHandler ShareOverLANStatusChanged;
         public event EventHandler SelectRandomStatusChanged;
         public event EventHandler ShowConfigFormEvent;
 
@@ -84,6 +84,7 @@ namespace Shadowsocks.Controller
 
         public List<Server> MergeConfiguration(Configuration mergeConfig, List<Server> servers)
         {
+            List<Server> missingServers = new List<Server>();
             if (servers != null)
             {
                 for (int j = 0; j < servers.Count; ++j)
@@ -93,11 +94,11 @@ namespace Shadowsocks.Controller
                         if (mergeConfig.configs[i].server == servers[j].server
                             && mergeConfig.configs[i].server_port == servers[j].server_port
                             && mergeConfig.configs[i].method == servers[j].method
+                            && mergeConfig.configs[i].protocol == servers[j].protocol
+                            && mergeConfig.configs[i].obfs == servers[j].obfs
                             && mergeConfig.configs[i].password == servers[j].password
                             && mergeConfig.configs[i].tcp_over_udp == servers[j].tcp_over_udp
                             && mergeConfig.configs[i].udp_over_tcp == servers[j].udp_over_tcp
-                            && mergeConfig.configs[i].obfs_tcp == servers[j].obfs_tcp
-                            //&& mergeConfig.configs[i].remarks == servers[j].remarks
                             )
                         {
                             servers[j].CopyServer(mergeConfig.configs[i]);
@@ -106,7 +107,30 @@ namespace Shadowsocks.Controller
                     }
                 }
             }
-            return servers;
+            for (int i = 0; i < mergeConfig.configs.Count; ++i)
+            {
+                int j = 0;
+                for (; j < servers.Count; ++j)
+                {
+                    if (mergeConfig.configs[i].server == servers[j].server
+                        && mergeConfig.configs[i].server_port == servers[j].server_port
+                        && mergeConfig.configs[i].method == servers[j].method
+                        && mergeConfig.configs[i].protocol == servers[j].protocol
+                        && mergeConfig.configs[i].obfs == servers[j].obfs
+                        && mergeConfig.configs[i].password == servers[j].password
+                        && mergeConfig.configs[i].tcp_over_udp == servers[j].tcp_over_udp
+                        && mergeConfig.configs[i].udp_over_tcp == servers[j].udp_over_tcp
+                        )
+                    {
+                        break;
+                    }
+                }
+                if (j == servers.Count)
+                {
+                    missingServers.Add(mergeConfig.configs[i]);
+                }
+            }
+            return missingServers;
         }
 
         public Configuration MergeGetConfiguration(Configuration mergeConfig)
@@ -121,25 +145,42 @@ namespace Shadowsocks.Controller
 
         public void SaveServers(List<Server> servers, int localPort)
         {
-            _config.configs = MergeConfiguration(_config, servers);
+            List<Server> missingServers = MergeConfiguration(_config, servers);
+            _config.configs = servers;
             _config.localPort = localPort;
             SaveConfig(_config);
+            foreach(Server s in missingServers)
+            {
+                s.GetConnections().CloseAll();
+            }
         }
 
         public void SaveServersConfig(Configuration config)
         {
-            _config.configs = MergeConfiguration(_config, config.configs);
+            List<Server> missingServers = MergeConfiguration(_config, config.configs);
+            _config.configs = config.configs;
+            _config.index = config.index;
+            //_config.buildinHttpProxy = config.buildinHttpProxy;
+            _config.shareOverLan = config.shareOverLan;
+            _config.authUser = config.authUser;
+            _config.authPass = config.authPass;
             _config.localPort = config.localPort;
             _config.reconnectTimes = config.reconnectTimes;
+            _config.random = config.random;
             _config.randomAlgorithm = config.randomAlgorithm;
             _config.TTL = config.TTL;
-            _config.socks5enable = config.socks5enable;
-            _config.socks5Host = config.socks5Host;
-            _config.socks5Port = config.socks5Port;
-            _config.socks5User = config.socks5User;
-            _config.socks5Pass = config.socks5Pass;
+            _config.proxyEnable = config.proxyEnable;
+            _config.proxyType = config.proxyType;
+            _config.proxyHost = config.proxyHost;
+            _config.proxyPort = config.proxyPort;
+            _config.proxyAuthUser = config.proxyAuthUser;
+            _config.proxyAuthPass = config.proxyAuthPass;
             _config.autoban = config.autoban;
-            SaveConfig(_config);
+            foreach (Server s in missingServers)
+            {
+                s.GetConnections().CloseAll();
+            }
+            SelectServerIndex(_config.index);
         }
 
         public bool AddServerBySSURL(string ssURL)
@@ -181,15 +222,15 @@ namespace Shadowsocks.Controller
             }
         }
 
-        public void ToggleShareOverLAN(bool enabled)
-        {
-            _config.shareOverLan = enabled;
-            SaveConfig(_config);
-            if (ShareOverLANStatusChanged != null)
-            {
-                ShareOverLANStatusChanged(this, new EventArgs());
-            }
-        }
+        //public void ToggleShareOverLAN(bool enabled)
+        //{
+        //    _config.shareOverLan = enabled;
+        //    SaveConfig(_config);
+        //    if (ShareOverLANStatusChanged != null)
+        //    {
+        //        ShareOverLANStatusChanged(this, new EventArgs());
+        //    }
+        //}
 
         public void ToggleSelectRandom(bool enabled)
         {
@@ -246,25 +287,45 @@ namespace Shadowsocks.Controller
             }
         }
 
+        protected string GetObfsPartOfSSLink(Server server)
+        {
+            string parts = "";
+            if (server.protocol.Length > 0 && server.protocol != "origin")
+            {
+                parts = server.protocol + ":" + parts;
+            }
+            if (server.obfs.Length > 0 && server.obfs != "plain")
+            {
+                parts = server.obfs + ":" + parts;
+            }
+            parts = parts + server.method + ":" + server.password + "@" + server.server + ":" + server.server_port;
+            if (server.obfs.Length > 0 && server.obfs != "plain" && server.obfsparam.Length > 0)
+            {
+                parts += "/" + System.Convert.ToBase64String(Encoding.UTF8.GetBytes(server.obfsparam)).Replace('+', '-').Replace('/', '_');
+            }
+            return parts;
+        }
+
         public string GetSSLinkForCurrentServer()
         {
             Server server = GetCurrentServer();
-            string parts = server.method + ":" + server.password + "@" + server.server + ":" + server.server_port;
-            string base64 = System.Convert.ToBase64String(Encoding.UTF8.GetBytes(parts));
+            string parts = GetObfsPartOfSSLink(server);
+            string base64 = System.Convert.ToBase64String(Encoding.UTF8.GetBytes(parts)).Replace('+', '-').Replace('/', '_');
             return "ss://" + base64;
         }
 
         public string GetSSLinkForServer(Server server)
         {
-            string parts = server.method + ":" + server.password + "@" + server.server + ":" + server.server_port;
-            string base64 = System.Convert.ToBase64String(Encoding.UTF8.GetBytes(parts));
+            string parts = GetObfsPartOfSSLink(server);
+            string base64 = System.Convert.ToBase64String(Encoding.UTF8.GetBytes(parts)).Replace('+', '-').Replace('/', '_');
             return "ss://" + base64;
         }
 
         public string GetSSRemarksLinkForServer(Server server)
         {
-            string parts = server.method + ":" + server.password + "@" + server.server + ":" + server.server_port + "#" + server.remarks;
-            string base64 = System.Convert.ToBase64String(Encoding.UTF8.GetBytes(parts));
+            string remarks = server.remarks_base64;
+            string parts = GetObfsPartOfSSLink(server) + "#" + remarks;
+            string base64 = System.Convert.ToBase64String(Encoding.UTF8.GetBytes(parts)).Replace('+', '-').Replace('/', '_');
             return "ss://" + base64;
         }
 
@@ -313,7 +374,7 @@ namespace Shadowsocks.Controller
 
             if (polipoRunner == null)
             {
-                polipoRunner = new PolipoRunner();
+                polipoRunner = new HttpProxyRunner();
             }
             if (_pacServer == null)
             {
@@ -328,27 +389,41 @@ namespace Shadowsocks.Controller
                 gfwListUpdater.Error += pacServer_PACUpdateError;
             }
 
-            if (_listener != null)
-            {
-                _listener.Stop();
-            }
-
             // don't put polipoRunner.Start() before pacServer.Stop()
             // or bind will fail when switching bind address from 0.0.0.0 to 127.0.0.1
             // though UseShellExecute is set to true now
             // http://stackoverflow.com/questions/10235093/socket-doesnt-close-after-application-exits-if-a-launched-process-is-open
-            polipoRunner.Stop();
             try
             {
-                polipoRunner.Start(_config);
+                if (_listener != null && !_listener.isConfigChange(_config))
+                {
+                    Local local = new Local(_config);
+                    _listener.GetServices()[0] = local;
+                    if (polipoRunner.HasExited())
+                    {
+                        polipoRunner.Stop();
+                        polipoRunner.Start(_config);
+                    }
+                }
+                else
+                {
+                    if (_listener != null)
+                    {
+                        _listener.Stop();
+                        _listener = null;
+                    }
 
-                Local local = new Local(_config);
-                List<Listener.Service> services = new List<Listener.Service>();
-                services.Add(local);
-                services.Add(_pacServer);
-                services.Add(new PortForwarder(polipoRunner.RunningPort));
-                _listener = new Listener(services);
-                _listener.Start(_config);
+                    polipoRunner.Stop();
+                    polipoRunner.Start(_config);
+
+                    Local local = new Local(_config);
+                    List<Listener.Service> services = new List<Listener.Service>();
+                    services.Add(local);
+                    services.Add(_pacServer);
+                    services.Add(new HttpPortForwarder(polipoRunner.RunningPort, _config));
+                    _listener = new Listener(services);
+                    _listener.Start(_config);
+                }
             }
             catch (Exception e)
             {

@@ -11,409 +11,6 @@ using System.Net.Sockets;
 
 namespace Shadowsocks.Model
 {
-    public class TransLog
-    {
-        public int size;
-        public DateTime recvTime;
-        public TransLog(int s, DateTime t)
-        {
-            size = s;
-            recvTime = t;
-        }
-    }
-    public class ServerSpeedLogShow
-    {
-        public long totalConnectTimes;
-        public long totalDisconnectTimes;
-        public long errorConnectTimes;
-        public long errorTimeoutTimes;
-        public long errorNoDataTimes;
-        public long errorContinurousTimes;
-        public long totalUploadBytes;
-        public long totalDownloadBytes;
-        public int sumConnectTime;
-        public long avgConnectTime;
-        public long avgDownloadBytes;
-        public long maxDownloadBytes;
-    }
-    public class ServerSpeedLog
-    {
-        private long totalConnectTimes = 0;
-        private long totalDisconnectTimes = 0;
-        private long errorConnectTimes = 0;
-        private long errorTimeoutTimes = 0;
-        private long errorNoDataTimes = 0;
-        private long errorContinurousTimes = 0;
-        private long transUpload = 0;
-        private long transDownload = 0;
-        private List<TransLog> transLog = null;
-        private long maxTransDownload = 0;
-        private List<int> connectTime = null;
-        private int sumConnectTime = 0;
-        private List<TransLog> speedLog = null;
-
-        public ServerSpeedLogShow Translate()
-        {
-            ServerSpeedLogShow ret = new ServerSpeedLogShow();
-            lock (this)
-            {
-                ret.avgDownloadBytes = AvgDownloadBytes;
-                ret.avgConnectTime = AvgConnectTime;
-                ret.maxDownloadBytes = maxTransDownload;
-                ret.totalConnectTimes = totalConnectTimes;
-                ret.totalDisconnectTimes = totalDisconnectTimes;
-                ret.errorConnectTimes = errorConnectTimes;
-                ret.errorTimeoutTimes = errorTimeoutTimes;
-                ret.errorNoDataTimes = errorNoDataTimes;
-                ret.errorContinurousTimes = errorContinurousTimes;
-                ret.totalUploadBytes = transUpload;
-                ret.totalDownloadBytes = transDownload;
-                ret.sumConnectTime = sumConnectTime;
-            }
-            return ret;
-        }
-        public long TotalConnectTimes
-        {
-            get
-            {
-                lock (this)
-                {
-                    return totalConnectTimes;
-                }
-            }
-        }
-        public long TotalDisconnectTimes
-        {
-            get
-            {
-                lock (this)
-                {
-                    return totalDisconnectTimes;
-                }
-            }
-        }
-        public long ErrorConnectTimes
-        {
-            get
-            {
-                lock (this)
-                {
-                    return errorConnectTimes;
-                }
-            }
-        }
-        public long ErrorTimeoutTimes
-        {
-            get
-            {
-                lock (this)
-                {
-                    return errorTimeoutTimes;
-                }
-            }
-        }
-        public long ErrorNoDataTimes
-        {
-            get
-            {
-                lock (this)
-                {
-                    return errorNoDataTimes;
-                }
-            }
-        }
-        public long ErrorContinurousTimes
-        {
-            get
-            {
-                lock (this)
-                {
-                    return errorContinurousTimes;
-                }
-            }
-        }
-        public long TotalUploadBytes
-        {
-            get
-            {
-                lock (this)
-                {
-                    return transUpload;
-                }
-            }
-        }
-        public long TotalDownloadBytes
-        {
-            get
-            {
-                lock (this)
-                {
-                    return transDownload;
-                }
-            }
-        }
-        public long AvgDownloadBytes
-        {
-            get
-            {
-                List<TransLog> transLog;
-                lock (this)
-                {
-                    if (this.transLog == null)
-                        return 0;
-                    transLog = new List<TransLog>();
-                    for (int i = 1; i < this.transLog.Count; ++i)
-                    {
-                        transLog.Add(this.transLog[i]);
-                    }
-                }
-                {
-                    long totalBytes = 0;
-                    double totalTime = 0;
-                    if (transLog.Count > 0 && DateTime.Now > transLog[transLog.Count - 1].recvTime.AddSeconds(10))
-                    {
-                        transLog.Clear();
-                        return 0;
-                    }
-                    for (int i = 1; i < transLog.Count; ++i)
-                    {
-                        totalBytes += transLog[i].size;
-                    }
-
-                    if (false)
-                    {
-                        for (int i = 1; i < transLog.Count; ++i)
-                        {
-                            long speed = (long)(transLog[i].size / (transLog[i].recvTime - transLog[i - 1].recvTime).TotalSeconds);
-                            if (speed > maxTransDownload)
-                                maxTransDownload = speed;
-                        }
-                    }
-                    else if (false)
-                    {
-                        int maxSpeed = 0;
-                        if (speedLog != null)
-                        {
-                            for (int i = 0; i < speedLog.Count; ++i)
-                            {
-                                maxSpeed = Math.Max(maxSpeed, speedLog[i].size);
-                            }
-                        }
-                        maxTransDownload = maxSpeed;
-                    }
-                    else //if (false)
-                    {
-                        long sumBytes = 0;
-                        int iBeg = 0;
-                        int iEnd = 0;
-                        for (iEnd = 0; iEnd < transLog.Count; ++iEnd)
-                        {
-                            sumBytes += transLog[iEnd].size;
-                            while (iBeg + 10 <= iEnd // 10 packet
-                                && (transLog[iEnd].recvTime - transLog[iBeg].recvTime).TotalSeconds > 5)
-                            {
-                                //if ((transLog[iBeg + 1].recvTime - transLog[iBeg].recvTime).TotalMilliseconds > 20)
-                                {
-                                    long speed = (long)((sumBytes - transLog[iBeg].size) / (transLog[iEnd].recvTime - transLog[iBeg].recvTime).TotalSeconds);
-                                    if (speed > maxTransDownload)
-                                        maxTransDownload = speed;
-                                }
-                                sumBytes -= transLog[iBeg].size;
-                                iBeg++;
-                            }
-                        }
-                    }
-                    if (transLog.Count > 1)
-                        totalTime = (transLog[transLog.Count - 1].recvTime - transLog[0].recvTime).TotalSeconds;
-                    if (totalTime > 1)
-                    {
-                        long ret = (long)(totalBytes / totalTime);
-                        if (ret > maxTransDownload)
-                            maxTransDownload = ret;
-                        return ret;
-                    }
-                    else
-                        return 0;
-                }
-            }
-        }
-        public long MaxDownloadBytes
-        {
-            get
-            {
-                lock (this)
-                {
-                    return maxTransDownload;
-                }
-            }
-        }
-        public long AvgConnectTime
-        {
-            get
-            {
-                lock (this)
-                {
-                    if (connectTime != null)
-                    {
-                        if (connectTime.Count > 4)
-                        {
-                            List<int> sTime = new List<int>();
-                            foreach (int t in connectTime)
-                            {
-                                sTime.Add(t);
-                            }
-                            sTime.Sort();
-                            int sum = 0;
-                            for (int i = 0; i < connectTime.Count / 2; ++i)
-                            {
-                                sum += sTime[i];
-                            }
-                            return sum / (connectTime.Count / 2);
-                        }
-                        if (connectTime.Count > 0)
-                            return sumConnectTime / connectTime.Count;
-                    }
-                    return -1;
-                }
-            }
-        }
-        public void ClearError()
-        {
-            lock (this)
-            {
-                if (totalConnectTimes > totalDisconnectTimes)
-                    totalConnectTimes -= totalDisconnectTimes;
-                else
-                    totalConnectTimes = 0;
-                totalDisconnectTimes = 0;
-                errorConnectTimes = 0;
-                errorTimeoutTimes = 0;
-                errorNoDataTimes = 0;
-                errorContinurousTimes = 0;
-            }
-        }
-        public void Clear()
-        {
-            lock (this)
-            {
-                if (totalConnectTimes > totalDisconnectTimes)
-                    totalConnectTimes -= totalDisconnectTimes;
-                else
-                    totalConnectTimes = 0;
-                totalDisconnectTimes = 0;
-                errorConnectTimes = 0;
-                errorTimeoutTimes = 0;
-                errorNoDataTimes = 0;
-                errorContinurousTimes = 0;
-                transUpload = 0;
-                transDownload = 0;
-                maxTransDownload = 0;
-            }
-        }
-        public void AddConnectTimes()
-        {
-            lock (this)
-            {
-                totalConnectTimes += 1;
-            }
-        }
-        public void AddDisconnectTimes()
-        {
-            lock (this)
-            {
-                totalDisconnectTimes += 1;
-            }
-        }
-        public void AddErrorTimes()
-        {
-            lock (this)
-            {
-                errorConnectTimes += 1;
-                errorContinurousTimes += 1;
-            }
-        }
-        public void AddNoDataTimes()
-        {
-            lock (this)
-            {
-                errorNoDataTimes += 1;
-                errorContinurousTimes += 1;
-            }
-        }
-        public void HasData()
-        {
-            lock (this)
-            {
-                errorNoDataTimes = 0;
-                errorContinurousTimes = 0;
-            }
-        }
-        public void AddTimeoutTimes()
-        {
-            lock (this)
-            {
-                errorTimeoutTimes += 1;
-                errorContinurousTimes += 1;
-            }
-        }
-        public void AddUploadBytes(long bytes)
-        {
-            lock (this)
-            {
-                transUpload += bytes;
-            }
-        }
-        public void AddDownloadBytes(long bytes)
-        {
-            lock (this)
-            {
-                transDownload += bytes;
-                if (transLog == null)
-                    transLog = new List<TransLog>();
-                if (transLog.Count > 0 && (DateTime.Now - transLog[transLog.Count - 1].recvTime).TotalMilliseconds < 100)
-                {
-                    transLog[transLog.Count - 1].size += (int)bytes;
-                }
-                else
-                {
-                    transLog.Add(new TransLog((int)bytes, DateTime.Now));
-                    while (transLog.Count > 0 && DateTime.Now > transLog[0].recvTime.AddSeconds(10))
-                    {
-                        transLog.RemoveAt(0);
-                    }
-                }
-            }
-        }
-        public void AddConnectTime(int millisecond)
-        {
-            lock (this)
-            {
-                if (connectTime == null)
-                    connectTime = new List<int>();
-                connectTime.Add(millisecond);
-                sumConnectTime += millisecond;
-                while (connectTime.Count > 20)
-                {
-                    sumConnectTime -= connectTime[0];
-                    connectTime.RemoveAt(0);
-                }
-            }
-        }
-        public void AddSpeedLog(TransLog speed)
-        {
-            lock (this)
-            {
-                if (speedLog == null)
-                    speedLog = new List<TransLog>();
-                if (speed.size > 0)
-                    speedLog.Add(speed);
-                while (speedLog.Count > 20)
-                {
-                    speedLog.RemoveAt(0);
-                }
-            }
-        }
-    }
     public class DnsBuffer
     {
         public IPAddress ip;
@@ -428,8 +25,8 @@ namespace Shadowsocks.Model
         public void UpdateDns(string host, IPAddress ip)
         {
             updateTime = DateTime.Now;
-            this.ip = ip;
-            this.host = host;
+            this.ip = new IPAddress(ip.GetAddressBytes());
+            this.host = (string)host.Clone();
         }
     }
     public class Connections
@@ -481,8 +78,8 @@ namespace Shadowsocks.Model
             {
                 try
                 {
-                    socket.Shutdown(SocketShutdown.Send);
-                    //socket.Shutdown(SocketShutdown.Both);
+                    //socket.Shutdown(SocketShutdown.Send);
+                    socket.Shutdown(SocketShutdown.Both);
                     //socket.Close();
                 }
                 catch
@@ -507,13 +104,18 @@ namespace Shadowsocks.Model
         public int server_port;
         public string password;
         public string method;
-        public string remarks;
+        public string obfs;
+        public string obfsparam;
+        public string remarks_base64;
         public bool tcp_over_udp;
         public bool udp_over_tcp;
-        public bool obfs_tcp;
+        public string protocol;
         public bool obfs_udp;
-        private bool enable;
+        public bool enable;
+        public string id;
 
+        private object protocoldata;
+        private object obfsdata;
         private ServerSpeedLog serverSpeedLog = new ServerSpeedLog();
         private DnsBuffer dnsBuffer = new DnsBuffer();
         private DnsBuffer dnsTargetBuffer = new DnsBuffer();
@@ -555,13 +157,36 @@ namespace Shadowsocks.Model
         {
             serverSpeedLog = log;
         }
+        public string remarks
+        {
+            get
+            {
+                if (this.remarks_base64.Length == 0)
+                    return this.remarks_base64;
+                string remarks = this.remarks_base64.Replace('-', '+').Replace('_', '/');
+                try
+                {
+                    return Encoding.UTF8.GetString(System.Convert.FromBase64String(remarks));
+                }
+                catch (FormatException)
+                {
+                    remarks = remarks_base64;
+                    remarks_base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(remarks_base64)).Replace('+', '-').Replace('/', '_');
+                    return remarks;
+                }
+            }
+            set
+            {
+                remarks_base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(value)).Replace('+', '-').Replace('/', '_');
+            }
+        }
         public string FriendlyName()
         {
             if (string.IsNullOrEmpty(server))
             {
                 return I18N.GetString("New server");
             }
-            if (string.IsNullOrEmpty(remarks))
+            if (string.IsNullOrEmpty(remarks_base64))
             {
                 if (server.IndexOf(':') >= 0)
                 {
@@ -592,11 +217,16 @@ namespace Shadowsocks.Model
             ret.server_port = server_port;
             ret.password = (string)password.Clone();
             ret.method = (string)method.Clone();
-            ret.remarks = (string)remarks.Clone();
+            ret.protocol = protocol;
+            ret.obfs = (string)obfs.Clone();
+            ret.obfsparam = (string)obfsparam.Clone();
+            ret.remarks_base64 = (string)remarks_base64.Clone();
             ret.enable = enable;
             ret.udp_over_tcp = udp_over_tcp;
-            ret.obfs_tcp = obfs_tcp;
             ret.obfs_udp = obfs_udp;
+            ret.id = id;
+            ret.protocoldata = protocoldata;
+            ret.obfsdata = obfsdata;
             return ret;
         }
 
@@ -605,12 +235,17 @@ namespace Shadowsocks.Model
             this.server = "127.0.0.1";
             this.server_port = 8388;
             this.method = "aes-256-cfb";
+            this.obfs = "plain";
+            this.obfsparam = "";
             this.password = "0";
-            this.remarks = "";
+            this.remarks_base64 = "";
             this.udp_over_tcp = false;
-            this.obfs_tcp = false;
+            this.protocol = "origin";
             this.obfs_udp = false;
             this.enable = true;
+            byte[] id = new byte[16];
+            Util.Utils.RandBytes(id, id.Length);
+            this.id = BitConverter.ToString(id);
         }
 
         public Server(string ssURL) : this()
@@ -652,7 +287,19 @@ namespace Shadowsocks.Model
                 if (remarkIndexLastAt > 0)
                 {
                     if (remarkIndexLastAt + 1 < data.Length)
-                        this.remarks = data.Substring(remarkIndexLastAt + 1);
+                    {
+                        this.remarks_base64 = data.Substring(remarkIndexLastAt + 1);
+                    }
+                    data = data.Substring(0, remarkIndexLastAt);
+                }
+                remarkIndexLastAt = data.IndexOf('/', indexLastAt);
+                string param = "";
+                if (remarkIndexLastAt > 0)
+                {
+                    if (remarkIndexLastAt + 1 < data.Length)
+                    {
+                        param = data.Substring(remarkIndexLastAt + 1);
+                    }
                     data = data.Substring(0, remarkIndexLastAt);
                 }
 
@@ -663,8 +310,38 @@ namespace Shadowsocks.Model
 
                 string beforeAt = data.Substring(0, indexLastAt);
                 string[] parts = beforeAt.Split(new[] { ':' });
-                this.method = parts[0];
-                this.password = parts[1];
+                this.method = parts[parts.Length - 2];
+                this.password = parts[parts.Length - 1];
+                if (parts.Length >= 4)
+                {
+                    this.protocol = parts[parts.Length - 3];
+                    this.obfs = parts[parts.Length - 4];
+                    if (param.Length > 0)
+                    {
+                        this.obfsparam = Encoding.UTF8.GetString(System.Convert.FromBase64String(param.Replace('-', '+').Replace('_', '/')));
+                    }
+                }
+                else if (parts.Length >= 3)
+                {
+                    string part = parts[parts.Length - 3];
+                    try
+                    {
+                        Obfs.ObfsBase obfs = (Obfs.ObfsBase)Obfs.ObfsFactory.GetObfs(part);
+                        int[] properties = obfs.GetObfs()[part];
+                        if (properties[0] > 0)
+                        {
+                            this.protocol = part;
+                        }
+                        else
+                        {
+                            this.obfs = part;
+                        }
+                    }
+                    catch
+                    {
+
+                    }
+                }
             }
             catch (IndexOutOfRangeException)
             {
@@ -680,6 +357,24 @@ namespace Shadowsocks.Model
         public void setEnable(bool enable)
         {
             this.enable = enable;
+        }
+
+        public object getObfsData()
+        {
+            return this.obfsdata;
+        }
+        public void setObfsData(object data)
+        {
+            this.obfsdata = data;
+        }
+
+        public object getProtocolData()
+        {
+            return this.protocoldata;
+        }
+        public void setProtocolData(object data)
+        {
+            this.protocoldata = data;
         }
     }
 }

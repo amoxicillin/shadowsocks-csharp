@@ -62,7 +62,7 @@ namespace Shadowsocks.View
         {
             this.Text = I18N.GetString("ServerLog") + "("
                 + (controller.GetCurrentConfiguration().shareOverLan ? "any" : "local") + ":" + controller.GetCurrentConfiguration().localPort.ToString()
-                + I18N.GetString(" Version") + UpdateChecker.Version
+                + I18N.GetString(" Version") + UpdateChecker.FullVersion
                 + ")";
         }
         private void UpdateTexts()
@@ -114,6 +114,16 @@ namespace Shadowsocks.View
             if (cell.Style.BackColor != newColor)
             {
                 cell.Style.BackColor = newColor;
+                rowChange = true;
+                return true;
+            }
+            return false;
+        }
+        public bool SetCellToolTipText(DataGridViewCell cell, string newString)
+        {
+            if (cell.ToolTipText != newString)
+            {
+                cell.ToolTipText = newString;
                 rowChange = true;
                 return true;
             }
@@ -230,7 +240,6 @@ namespace Shadowsocks.View
                     int id = (int)id_cell.Value;
                     Server server = config.configs[id];
                     ServerSpeedLogShow serverSpeedLog = ServerSpeedLogList[id];
-                    const byte colAdd = 2;
                     listOrder[id] = list_index;
                     rowChange = false;
                     for (int curcol = 0; curcol < ServerDataGrid.Columns.Count; ++curcol)
@@ -262,8 +271,8 @@ namespace Shadowsocks.View
                         // TotalConnecting
                         else if (columnName == "Connecting")
                         {
-                            SetCellText(cell, server.GetConnections().Count);
-                            //SetCellText(cell, serverSpeedLog.totalConnectTimes - serverSpeedLog.totalDisconnectTimes);
+                            //SetCellText(cell, server.GetConnections().Count);
+                            SetCellText(cell, serverSpeedLog.totalConnectTimes - serverSpeedLog.totalDisconnectTimes);
                         }
                         // AvgConnectTime
                         else if (columnName == "AvgLatency")
@@ -321,9 +330,10 @@ namespace Shadowsocks.View
                         else if (columnName == "Upload")
                         {
                             string valStr = FormatBytes(serverSpeedLog.totalUploadBytes);
-                            if ((string)cell.Value != valStr)
+                            string fullVal = serverSpeedLog.totalUploadBytes.ToString();
+                            if (cell.ToolTipText != fullVal)
                             {
-                                if (valStr == "0")
+                                if (fullVal == "0")
                                     SetBackColor(cell, Color.White);
                                 else
                                 {
@@ -338,15 +348,17 @@ namespace Shadowsocks.View
                                 //Color col = cell.Style.BackColor;
                                 //SetBackColor(cell, Color.FromArgb(Math.Min(255, col.R + colAdd), Math.Min(255, col.G + colAdd), Math.Min(255, col.B + colAdd)));
                             }
+                            SetCellToolTipText(cell, fullVal);
                             SetCellText(cell, valStr);
                         }
                         // TotalDownloadBytes
                         else if (columnName == "Download")
                         {
                             string valStr = FormatBytes(serverSpeedLog.totalDownloadBytes);
-                            if ((string)cell.Value != valStr)
+                            string fullVal = serverSpeedLog.totalDownloadBytes.ToString();
+                            if (cell.ToolTipText != fullVal)
                             {
-                                if (valStr == "0")
+                                if (fullVal == "0")
                                     SetBackColor(cell, Color.White);
                                 else
                                 {
@@ -361,12 +373,40 @@ namespace Shadowsocks.View
                                 //Color col = cell.Style.BackColor;
                                 //SetBackColor(cell, Color.FromArgb(Math.Min(255, col.R + colAdd), Math.Min(255, col.G + colAdd), Math.Min(255, col.B + colAdd)));
                             }
+                            SetCellToolTipText(cell, fullVal);
+                            SetCellText(cell, valStr);
+                        }
+                        else if (columnName == "DownloadRaw")
+                        {
+                            string valStr = FormatBytes(serverSpeedLog.totalDownloadRawBytes);
+                            string fullVal = serverSpeedLog.totalDownloadRawBytes.ToString();
+                            if (cell.ToolTipText != fullVal)
+                            {
+                                if (fullVal == "0")
+                                    SetBackColor(cell, Color.White);
+                                else
+                                {
+                                    SetBackColor(cell, Color.LightGreen);
+                                    cell.Tag = 8;
+                                }
+                            }
+                            else if (cell.Tag != null)
+                            {
+                                cell.Tag = (int)cell.Tag - 1;
+                                if ((int)cell.Tag == 0) SetBackColor(cell, Color.White);
+                                //Color col = cell.Style.BackColor;
+                                //SetBackColor(cell, Color.FromArgb(Math.Min(255, col.R + colAdd), Math.Min(255, col.G + colAdd), Math.Min(255, col.B + colAdd)));
+                            }
+                            SetCellToolTipText(cell, fullVal);
                             SetCellText(cell, valStr);
                         }
                         // ErrorConnectTimes
                         else if (columnName == "ConnectError")
                         {
-                            SetCellText(cell, serverSpeedLog.errorConnectTimes);
+                            long val = serverSpeedLog.errorConnectTimes + serverSpeedLog.errorDecodeTimes;
+                            Color col = Color.FromArgb(255, (byte)Math.Max(0, 255 - val * 2.5), (byte)Math.Max(0, 255 - val * 2.5));
+                            SetBackColor(cell, col);
+                            SetCellText(cell, val);
                         }
                         // ErrorTimeoutTimes
                         else if (columnName == "ConnectTimeout")
@@ -374,14 +414,14 @@ namespace Shadowsocks.View
                             SetCellText(cell, serverSpeedLog.errorTimeoutTimes);
                         }
                         // ErrorTimeoutTimes
-                        else if (columnName == "ConnectNoData")
+                        else if (columnName == "ConnectEmpty")
                         {
-                            long val = serverSpeedLog.errorNoDataTimes;
+                            long val = serverSpeedLog.errorEmptyTimes;
                             Color col = Color.FromArgb(255, (byte)Math.Max(0, 255 - val * 8), (byte)Math.Max(0, 255 - val * 8));
                             SetBackColor(cell, col);
                             SetCellText(cell, val);
                         }
-                        // ErrorTimeoutTimes
+                        // ErrorContinurousTimes
                         else if (columnName == "Continuous")
                         {
                             long val = serverSpeedLog.errorContinurousTimes;
@@ -392,17 +432,15 @@ namespace Shadowsocks.View
                         // ErrorPersent
                         else if (columnName == "ErrorPercent")
                         {
-                            if (serverSpeedLog.totalConnectTimes > 0)
+                            if (serverSpeedLog.errorLogTimes + serverSpeedLog.totalConnectTimes - serverSpeedLog.totalDisconnectTimes > 0)
                             {
                                 double percent = (serverSpeedLog.errorConnectTimes
                                     + serverSpeedLog.errorTimeoutTimes
-                                    + serverSpeedLog.errorNoDataTimes)
-                                    * 100.00 / serverSpeedLog.totalConnectTimes;
+                                    + serverSpeedLog.errorDecodeTimes)
+                                    * 100.00
+                                    / (serverSpeedLog.errorLogTimes + serverSpeedLog.totalConnectTimes - serverSpeedLog.totalDisconnectTimes);
                                 SetBackColor(cell, Color.FromArgb(255, (byte)(255 - percent * 2), (byte)(255 - percent * 2)));
-                                if (percent < 1e-4)
-                                    SetCellText(cell, percent.ToString("F0") + "%");
-                                else
-                                    SetCellText(cell, percent.ToString("F2") + "%");
+                                SetCellText(cell, percent.ToString("F0") + "%");
                             }
                             else
                             {
@@ -473,6 +511,7 @@ namespace Shadowsocks.View
                     Configuration config = controller.GetCurrentConfiguration();
                     Server server = config.configs[id];
                     server.setEnable(!server.isEnable());
+                    controller.SelectServerIndex(config.index);
                 }
                 ServerDataGrid[0, e.RowIndex].Selected = true;
             }
@@ -501,7 +540,7 @@ namespace Shadowsocks.View
                 }
                 if (ServerDataGrid.Columns[e.ColumnIndex].Name == "ConnectError"
                     || ServerDataGrid.Columns[e.ColumnIndex].Name == "ConnectTimeout"
-                    || ServerDataGrid.Columns[e.ColumnIndex].Name == "ConnectNoData"
+                    || ServerDataGrid.Columns[e.ColumnIndex].Name == "ConnectEmpty"
                     || ServerDataGrid.Columns[e.ColumnIndex].Name == "Continuous"
                     )
                 {
@@ -568,7 +607,6 @@ namespace Shadowsocks.View
                 || e.Column.Name == "Connecting"
                 || e.Column.Name == "ConnectError"
                 || e.Column.Name == "ConnectTimeout"
-                || e.Column.Name == "ConnectNoData"
                 || e.Column.Name == "Continuous"
                 )
             {
@@ -589,6 +627,7 @@ namespace Shadowsocks.View
                 || e.Column.Name == "MaxSpeed"
                 || e.Column.Name == "Upload"
                 || e.Column.Name == "Download"
+                || e.Column.Name == "DownloadRaw"
                 )
             {
                 String s1 = Convert.ToString(e.CellValue1);

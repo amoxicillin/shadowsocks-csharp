@@ -24,6 +24,7 @@ namespace Shadowsocks.Encryption
         protected int[] _cipherInfo;
         protected byte[] _key;
         protected int keyLen;
+        protected byte[] _iv;
         protected int ivLen;
 
 
@@ -34,6 +35,17 @@ namespace Shadowsocks.Encryption
         }
 
         protected abstract Dictionary<string, int[]> getCiphers();
+
+        public override byte[] getIV()
+        {
+            return _iv;
+        }
+        public override byte[] getKey()
+        {
+            byte[] key = (byte[])_key.Clone();
+            Array.Resize(ref key, keyLen);
+            return key;
+        }
 
         protected void InitKey(string method, string password)
         {
@@ -49,18 +61,24 @@ namespace Shadowsocks.Encryption
             }
             keyLen = ciphers[_method][0];
             ivLen = ciphers[_method][1];
-            if (CachedKeys.ContainsKey(k))
+            if (!CachedKeys.ContainsKey(k))
             {
+                lock (CachedKeys)
+                {
+                    if (!CachedKeys.ContainsKey(k))
+                    {
+                        byte[] passbuf = Encoding.UTF8.GetBytes(password);
+                        _key = new byte[32];
+                        byte[] iv = new byte[16];
+                        bytesToKey(passbuf, _key);
+                        CachedKeys[k] = _key;
+                    }
+                }
+            }
+            if (_key == null)
                 _key = CachedKeys[k];
-            }
-            else
-            {
-                byte[] passbuf = Encoding.UTF8.GetBytes(password);
-                _key = new byte[32];
-                byte[] iv = new byte[16];
-                bytesToKey(passbuf, _key);
-                CachedKeys[k] = _key;
-            }
+            Array.Resize(ref _iv, ivLen);
+            randBytes(_iv, ivLen);
         }
 
         protected void bytesToKey(byte[] password, byte[] key)
@@ -70,16 +88,15 @@ namespace Shadowsocks.Encryption
             byte[] md5sum = null;
             while (i < key.Length)
             {
-                MD5 md5 = MD5.Create();
                 if (i == 0)
                 {
-                    md5sum = md5.ComputeHash(password);
+                    md5sum = MbedTLS.MD5(password);
                 }
                 else
                 {
                     md5sum.CopyTo(result, 0);
                     password.CopyTo(result, md5sum.Length);
-                    md5sum = md5.ComputeHash(result);
+                    md5sum = MbedTLS.MD5(result);
                 }
                 md5sum.CopyTo(key, i);
                 i += md5sum.Length;
@@ -89,7 +106,8 @@ namespace Shadowsocks.Encryption
         protected static void randBytes(byte[] buf, int length)
         {
             byte[] temp = new byte[length];
-            new Random().NextBytes(temp);
+            RNGCryptoServiceProvider rngServiceProvider = new RNGCryptoServiceProvider();
+            rngServiceProvider.GetBytes(temp);
             temp.CopyTo(buf, 0);
         }
 
@@ -117,7 +135,7 @@ namespace Shadowsocks.Encryption
             if (!_encryptIVSent)
             {
                 _encryptIVSent = true;
-                randBytes(outbuf, ivLen);
+                Buffer.BlockCopy(_iv, 0, outbuf, 0, ivLen);
                 initCipher(outbuf, true);
                 outlength = length + ivLen;
                 lock (tempbuf)
@@ -161,6 +179,7 @@ namespace Shadowsocks.Encryption
             _decryptIVReceived = false;
             _encryptIVOffset = 0; // SSL
             _decryptIVOffset = 0; // SSL
+            randBytes(_iv, ivLen);
         }
 
     }
